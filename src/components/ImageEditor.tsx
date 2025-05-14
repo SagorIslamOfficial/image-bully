@@ -4,6 +4,7 @@ import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -17,9 +18,13 @@ import {
   SlidersVertical,
   ZoomIn,
   ZoomOut,
+  Wand,
+  Type,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import TextOverlay from './TextOverlay';
+import EnhanceTools from './EnhanceTools';
 
 interface ImageEditorProps {
   originalImage: File | null;
@@ -43,7 +48,27 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
   const [originalSize, setOriginalSize] = useState<{ width: number; height: number } | null>(null);
   const [processedSize, setProcessedSize] = useState<{ width: number; height: number } | null>(null);
   
+  // Text overlay state
+  const [textOverlays, setTextOverlays] = useState<Array<{
+    id: string;
+    text: string;
+    x: number;
+    y: number;
+    fontSize: number;
+    color: string;
+    fontFamily: string;
+  }>>([]);
+  
+  // Enhancement state
+  const [noiseReduction, setNoiseReduction] = useState<number[]>([0]);
+  const [sharpen, setSharpen] = useState<number[]>([0]);
+  const [upscaleFactor, setUpscaleFactor] = useState<number>(1);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [isUpscaling, setIsUpscaling] = useState(false);
+  const [enhancementProgress, setEnhancementProgress] = useState(0);
+  
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const textCanvasRef = useRef<HTMLCanvasElement>(null);
   const { toast } = useToast();
 
   // Initialize the canvas with the image
@@ -77,6 +102,13 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
           updateCanvas();
         }
       }
+      
+      // Initialize text canvas
+      if (textCanvasRef.current && processedSize) {
+        const canvas = textCanvasRef.current;
+        canvas.width = image.width;
+        canvas.height = image.height;
+      }
     };
     
     return () => {
@@ -91,7 +123,12 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
   // Update the canvas when settings change
   useEffect(() => {
     updateCanvas();
-  }, [brightness, contrast, saturation, resizePercentage, format, quality]);
+  }, [brightness, contrast, saturation, resizePercentage, format, quality, noiseReduction, sharpen]);
+
+  // Update text canvas when text overlays change
+  useEffect(() => {
+    renderTextOverlays();
+  }, [textOverlays, processedSize]);
 
   const updateCanvas = () => {
     if (!canvasRef.current || !originalSize) return;
@@ -123,6 +160,9 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
       // Apply filters
       applyFilters(ctx, canvas);
       
+      // Apply image enhancements
+      applyImageEnhancements(ctx, canvas);
+      
       // Update the processed image URL
       generateProcessedImage();
       
@@ -131,6 +171,13 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
         width: newWidth,
         height: newHeight
       });
+      
+      // Update text canvas size
+      if (textCanvasRef.current) {
+        textCanvasRef.current.width = newWidth;
+        textCanvasRef.current.height = newHeight;
+        renderTextOverlays();
+      }
     };
   };
 
@@ -147,10 +194,268 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
     ctx.filter = 'none';
   };
 
-  const generateProcessedImage = () => {
+  const applyImageEnhancements = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
+    // Apply noise reduction (simple blur + sharpen technique)
+    if (noiseReduction[0] > 0) {
+      // First apply blur to reduce noise
+      const blurAmount = noiseReduction[0] / 50; // Convert 0-100 scale to 0-2 for blur
+      ctx.filter = `blur(${blurAmount}px)`;
+      
+      // Create temp canvas for the blur step
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = canvas.width;
+      tempCanvas.height = canvas.height;
+      const tempCtx = tempCanvas.getContext('2d');
+      
+      if (tempCtx) {
+        // Copy current canvas to temp
+        tempCtx.drawImage(canvas, 0, 0);
+        
+        // Clear original and apply blur
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(tempCanvas, 0, 0);
+        ctx.filter = 'none';
+      }
+    }
+    
+    // Apply sharpen if needed (using contrast as a simple sharpening method)
+    if (sharpen[0] > 0) {
+      const sharpenAmount = 100 + sharpen[0]; // 100 is neutral, above adds sharpness
+      ctx.filter = `contrast(${sharpenAmount}%)`;
+      
+      // Create temp canvas for the sharpen step
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = canvas.width;
+      tempCanvas.height = canvas.height;
+      const tempCtx = tempCanvas.getContext('2d');
+      
+      if (tempCtx) {
+        // Copy current canvas to temp
+        tempCtx.drawImage(canvas, 0, 0);
+        
+        // Clear original and apply sharpen
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(tempCanvas, 0, 0);
+        ctx.filter = 'none';
+      }
+    }
+  };
+
+  const renderTextOverlays = () => {
+    if (!textCanvasRef.current || !processedSize) return;
+    
+    const canvas = textCanvasRef.current;
+    const ctx = canvas.getContext('2d');
+    
+    if (!ctx) return;
+    
+    // Clear the canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Draw each text overlay
+    textOverlays.forEach(overlay => {
+      ctx.font = `${overlay.fontSize}px ${overlay.fontFamily}`;
+      ctx.fillStyle = overlay.color;
+      ctx.fillText(overlay.text, overlay.x, overlay.y);
+    });
+  };
+
+  const handleAddText = () => {
+    // Add a new text overlay
+    const newTextOverlay = {
+      id: Date.now().toString(),
+      text: 'Sample Text',
+      x: processedSize ? processedSize.width / 2 - 50 : 100,
+      y: processedSize ? processedSize.height / 2 : 100,
+      fontSize: 24,
+      color: '#ffffff',
+      fontFamily: 'Arial'
+    };
+    
+    setTextOverlays([...textOverlays, newTextOverlay]);
+    toast({
+      title: "Text added",
+      description: "Drag to position the text on your image",
+    });
+  };
+
+  const handleUpdateText = (id: string, updates: Partial<typeof textOverlays[0]>) => {
+    setTextOverlays(prev => 
+      prev.map(overlay => 
+        overlay.id === id ? { ...overlay, ...updates } : overlay
+      )
+    );
+  };
+
+  const handleDeleteText = (id: string) => {
+    setTextOverlays(prev => prev.filter(overlay => overlay.id !== id));
+  };
+
+  const handleUpscale = async () => {
+    if (!canvasRef.current || !processedSize) return;
+    
+    setIsUpscaling(true);
+    setEnhancementProgress(10);
+    
+    try {
+      // Simulate AI upscaling process with multiple steps
+      await new Promise(resolve => setTimeout(resolve, 500));
+      setEnhancementProgress(30);
+      
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      
+      if (!ctx) {
+        throw new Error('Canvas context not available');
+      }
+      
+      // Get current image data
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      
+      // Calculate new dimensions based on upscale factor
+      const newWidth = Math.round(canvas.width * upscaleFactor);
+      const newHeight = Math.round(canvas.height * upscaleFactor);
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+      setEnhancementProgress(50);
+      
+      // Update canvas dimensions
+      canvas.width = newWidth;
+      canvas.height = newHeight;
+      
+      // Simple upscale (would be replaced by AI upscale in production)
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      
+      // Create a temporary canvas to store the original image
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = imageData.width;
+      tempCanvas.height = imageData.height;
+      const tempCtx = tempCanvas.getContext('2d');
+      
+      if (!tempCtx) {
+        throw new Error('Temporary canvas context not available');
+      }
+      
+      // Put the original image data on the temporary canvas
+      tempCtx.putImageData(imageData, 0, 0);
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+      setEnhancementProgress(80);
+      
+      // Draw the image from the temporary canvas to the main canvas with upscaling
+      ctx.drawImage(tempCanvas, 0, 0, newWidth, newHeight);
+      
+      // Update processed size
+      setProcessedSize({
+        width: newWidth,
+        height: newHeight
+      });
+      
+      // Update text canvas size
+      if (textCanvasRef.current) {
+        textCanvasRef.current.width = newWidth;
+        textCanvasRef.current.height = newHeight;
+        renderTextOverlays();
+      }
+      
+      setEnhancementProgress(100);
+      
+      // Generate new processed image URL
+      generateProcessedImage();
+      
+      toast({
+        title: "Image upscaled",
+        description: `New dimensions: ${newWidth}×${newHeight}`,
+      });
+    } catch (error) {
+      console.error('Error during upscaling:', error);
+      toast({
+        title: "Upscaling failed",
+        description: "An error occurred during upscaling",
+        variant: "destructive"
+      });
+    } finally {
+      setTimeout(() => {
+        setIsUpscaling(false);
+        setEnhancementProgress(0);
+      }, 500);
+    }
+  };
+
+  const handleRestoreImage = async () => {
     if (!canvasRef.current) return;
     
-    const canvas = canvasRef.current;
+    setIsRestoring(true);
+    setEnhancementProgress(5);
+    
+    try {
+      // Simulate a multi-step restoration process
+      await new Promise(resolve => setTimeout(resolve, 500));
+      setEnhancementProgress(20);
+      
+      // Apply noise reduction
+      setNoiseReduction([60]);
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+      setEnhancementProgress(40);
+      
+      // Increase contrast slightly
+      setContrast([115]);
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+      setEnhancementProgress(60);
+      
+      // Add a bit of saturation to restore colors
+      setSaturation([110]);
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+      setEnhancementProgress(80);
+      
+      // Apply sharpening
+      setSharpen([40]);
+      
+      await new Promise(resolve => setTimeout(resolve, 300));
+      setEnhancementProgress(100);
+      
+      toast({
+        title: "Image restored",
+        description: "Old photo restoration complete",
+      });
+    } catch (error) {
+      console.error('Error during restoration:', error);
+      toast({
+        title: "Restoration failed",
+        description: "An error occurred during image restoration",
+        variant: "destructive"
+      });
+    } finally {
+      setTimeout(() => {
+        setIsRestoring(false);
+        setEnhancementProgress(0);
+      }, 500);
+    }
+  };
+
+  const generateProcessedImage = () => {
+    if (!canvasRef.current || !textCanvasRef.current) return;
+    
+    const imageCanvas = canvasRef.current;
+    const textCanvas = textCanvasRef.current;
+    
+    // Create a composite canvas to merge image and text
+    const compositeCanvas = document.createElement('canvas');
+    compositeCanvas.width = imageCanvas.width;
+    compositeCanvas.height = imageCanvas.height;
+    const compositeCtx = compositeCanvas.getContext('2d');
+    
+    if (!compositeCtx) return;
+    
+    // Draw the image canvas onto the composite canvas
+    compositeCtx.drawImage(imageCanvas, 0, 0);
+    
+    // Draw the text canvas on top
+    compositeCtx.drawImage(textCanvas, 0, 0);
     
     // Determine the output format
     let outputFormat = 'image/jpeg';
@@ -164,7 +469,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
     
     // Convert the canvas to a data URL with the selected quality (0-1)
     const outputQuality = format === 'png' ? undefined : quality[0] / 100;
-    const dataURL = canvas.toDataURL(outputFormat, outputQuality);
+    const dataURL = compositeCanvas.toDataURL(outputFormat, outputQuality);
     
     // Clean up previous processed image URL
     if (processedImageUrl !== previewUrl) {
@@ -176,9 +481,24 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
   };
 
   const handleDownload = () => {
-    if (!canvasRef.current || !originalImage) return;
+    if (!canvasRef.current || !textCanvasRef.current || !originalImage) return;
     
-    const canvas = canvasRef.current;
+    const imageCanvas = canvasRef.current;
+    const textCanvas = textCanvasRef.current;
+    
+    // Create a composite canvas to merge image and text
+    const compositeCanvas = document.createElement('canvas');
+    compositeCanvas.width = imageCanvas.width;
+    compositeCanvas.height = imageCanvas.height;
+    const compositeCtx = compositeCanvas.getContext('2d');
+    
+    if (!compositeCtx) return;
+    
+    // Draw the image canvas onto the composite canvas
+    compositeCtx.drawImage(imageCanvas, 0, 0);
+    
+    // Draw the text canvas on top
+    compositeCtx.drawImage(textCanvas, 0, 0);
     
     // Determine the output format and file extension
     let outputFormat = 'image/jpeg';
@@ -205,7 +525,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
     const outputQuality = format === 'png' ? undefined : quality[0] / 100;
     
     // Create a download link
-    canvas.toBlob((blob) => {
+    compositeCanvas.toBlob((blob) => {
       if (!blob) {
         toast({
           title: "Error",
@@ -241,6 +561,9 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
     setFormat('original');
     setQuality([80]);
     setResizePercentage([100]);
+    setNoiseReduction([0]);
+    setSharpen([0]);
+    setTextOverlays([]);
     updateCanvas();
   };
 
@@ -264,11 +587,34 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
                   className="max-w-full max-h-full shadow-lg"
                   style={{ display: 'none' }}
                 />
+                <canvas
+                  ref={textCanvasRef}
+                  className="absolute top-0 left-0 pointer-events-none"
+                  style={{ display: 'none' }}
+                />
                 <img 
                   src={processedImageUrl} 
                   alt="Preview" 
                   className="max-w-full max-h-full transition-all"
                 />
+                
+                {/* Text overlay positioning interface would be here in a real implementation */}
+                
+                {/* Progress overlay for enhancements */}
+                {(isRestoring || isUpscaling) && (
+                  <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center">
+                    <div className="w-64 h-3 bg-gray-700 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-primary rounded-full transition-all duration-300"
+                        style={{ width: `${enhancementProgress}%` }}
+                      />
+                    </div>
+                    <p className="text-white mt-3">
+                      {isRestoring ? "Restoring image..." : "Upscaling image..."}
+                      {enhancementProgress}%
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </CardContent>
@@ -307,7 +653,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
         <Card className="w-full h-full">
           <CardContent className="p-4">
             <Tabs defaultValue="adjust">
-              <TabsList className="grid w-full grid-cols-3 mb-4">
+              <TabsList className="grid w-full grid-cols-5 mb-4">
                 <TabsTrigger value="adjust">
                   <SlidersVertical size={16} className="mr-2" />
                   Adjust
@@ -315,6 +661,14 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
                 <TabsTrigger value="resize">
                   <ZoomIn size={16} className="mr-2" />
                   Resize
+                </TabsTrigger>
+                <TabsTrigger value="enhance">
+                  <Wand size={16} className="mr-2" />
+                  Enhance
+                </TabsTrigger>
+                <TabsTrigger value="text">
+                  <Type size={16} className="mr-2" />
+                  Text
                 </TabsTrigger>
                 <TabsTrigger value="export">
                   <Download size={16} className="mr-2" />
@@ -400,6 +754,29 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
                     </div>
                   </div>
                 )}
+              </TabsContent>
+              
+              <TabsContent value="enhance" className="space-y-4">
+                <EnhanceTools
+                  noiseReduction={noiseReduction}
+                  setNoiseReduction={setNoiseReduction}
+                  sharpen={sharpen}
+                  setSharpen={setSharpen}
+                  upscaleFactor={upscaleFactor}
+                  setUpscaleFactor={setUpscaleFactor}
+                  onRestoreImage={handleRestoreImage}
+                  onUpscaleImage={handleUpscale}
+                  isProcessing={isRestoring || isUpscaling}
+                />
+              </TabsContent>
+              
+              <TabsContent value="text" className="space-y-4">
+                <TextOverlay 
+                  textOverlays={textOverlays}
+                  onAddText={handleAddText}
+                  onUpdateText={handleUpdateText}
+                  onDeleteText={handleDeleteText}
+                />
               </TabsContent>
               
               <TabsContent value="export" className="space-y-4">
@@ -489,3 +866,4 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
 };
 
 export default ImageEditor;
+
