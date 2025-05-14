@@ -13,18 +13,21 @@ import {
 } from '@/components/ui/select';
 import { Plus, Trash } from 'lucide-react';
 
+// Define a TextOverlayItem interface for better type safety
+interface TextOverlayItem {
+  id: string;
+  text: string;
+  x: number;
+  y: number;
+  fontSize: number;
+  color: string;
+  fontFamily: string;
+}
+
 interface TextOverlayProps {
-  textOverlays: Array<{
-    id: string;
-    text: string;
-    x: number;
-    y: number;
-    fontSize: number;
-    color: string;
-    fontFamily: string;
-  }>;
+  textOverlays: Array<TextOverlayItem>;
   onAddText: () => void;
-  onUpdateText: (id: string, updates: Partial<typeof textOverlays[0]>) => void;
+  onUpdateText: (id: string, updates: Partial<TextOverlayItem>) => void;
   onDeleteText: (id: string) => void;
 }
 
