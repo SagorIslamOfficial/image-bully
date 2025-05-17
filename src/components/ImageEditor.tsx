@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
@@ -28,6 +27,7 @@ import { useToast } from '@/hooks/use-toast';
 import TextOverlay from './TextOverlay';
 import EnhanceTools from './EnhanceTools';
 import BackgroundRemover from './BackgroundRemover';
+import EditorDropdownMenu from './EditorDropdownMenu';
 
 interface ImageEditorProps {
   originalImage: File | null;
@@ -685,9 +685,20 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
   };
 
+  // Function to handle tab selection from dropdown
+  const handleTabSelect = (tab: string) => {
+    // Set the active tab based on the selected option
+    if (['adjust', 'enhance', 'background', 'text', 'resize', 'export'].includes(tab)) {
+      const tabsElement = document.querySelector(`[data-state="active"][value="${tab}"]`);
+      if (tabsElement) {
+        (tabsElement as HTMLElement).click();
+      }
+    }
+  };
+
   return (
-    <div className="w-full grid gap-4 grid-cols-1 md:grid-cols-3">
-      <div className="md:col-span-2">
+    <div className="w-full grid gap-4 grid-cols-1 md:grid-cols-2">
+      <div className="md:col-span-1">
         <Card className="w-full h-full flex flex-col shadow-md">
           <CardContent className="p-0 overflow-hidden relative flex-1 min-h-[300px]">
             <div className="absolute inset-0 flex items-center justify-center overflow-auto">
@@ -768,32 +779,47 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
       <div className="md:col-span-1">
         <Card className="w-full h-full shadow-md">
           <CardContent className="p-3">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-sm font-medium">Edit Image</h3>
+              <div className="flex gap-2">
+                <EditorDropdownMenu 
+                  label="Tools"
+                  icon={<SlidersVertical size={14} />}
+                  onOptionSelect={handleTabSelect}
+                  options={[
+                    { value: 'adjust', label: 'Adjust', icon: <SlidersVertical size={14} /> },
+                    { value: 'enhance', label: 'Enhance', icon: <Wand size={14} /> }
+                  ]}
+                />
+                <EditorDropdownMenu 
+                  label="Content"
+                  icon={<Type size={14} />}
+                  onOptionSelect={handleTabSelect}
+                  options={[
+                    { value: 'text', label: 'Text', icon: <Type size={14} /> },
+                    { value: 'background', label: 'Background', icon: <Eraser size={14} /> },
+                    { value: 'resize', label: 'Resize', icon: <ZoomIn size={14} /> }
+                  ]}
+                />
+                <EditorDropdownMenu 
+                  label="Export"
+                  icon={<FileImage size={14} />}
+                  onOptionSelect={handleTabSelect}
+                  options={[
+                    { value: 'export', label: 'Export Settings', icon: <FileImage size={14} /> }
+                  ]}
+                />
+              </div>
+            </div>
+            
             <Tabs defaultValue="adjust" className="w-full">
-              <TabsList className="grid w-full grid-cols-3 mb-4">
-                <TabsTrigger value="adjust" className="text-xs flex flex-col items-center py-1">
-                  <SlidersVertical size={14} className="mb-1" />
-                  Adjust
-                </TabsTrigger>
-                <TabsTrigger value="enhance" className="text-xs flex flex-col items-center py-1">
-                  <Wand size={14} className="mb-1" />
-                  Enhance
-                </TabsTrigger>
-                <TabsTrigger value="background" className="text-xs flex flex-col items-center py-1">
-                  <Eraser size={14} className="mb-1" />
-                  Background
-                </TabsTrigger>
-                <TabsTrigger value="text" className="text-xs flex flex-col items-center py-1">
-                  <Type size={14} className="mb-1" />
-                  Text
-                </TabsTrigger>
-                <TabsTrigger value="resize" className="text-xs flex flex-col items-center py-1">
-                  <ZoomIn size={14} className="mb-1" />
-                  Resize
-                </TabsTrigger>
-                <TabsTrigger value="export" className="text-xs flex flex-col items-center py-1">
-                  <FileImage size={14} className="mb-1" />
-                  Export
-                </TabsTrigger>
+              <TabsList className="hidden">
+                <TabsTrigger value="adjust">Adjust</TabsTrigger>
+                <TabsTrigger value="enhance">Enhance</TabsTrigger>
+                <TabsTrigger value="background">Background</TabsTrigger>
+                <TabsTrigger value="text">Text</TabsTrigger>
+                <TabsTrigger value="resize">Resize</TabsTrigger>
+                <TabsTrigger value="export">Export</TabsTrigger>
               </TabsList>
               
               <TabsContent value="adjust" className="space-y-3">
