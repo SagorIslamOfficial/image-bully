@@ -2,8 +2,11 @@
 import { useState } from 'react';
 import ImageOptimizer from '@/components/ImageOptimizer';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { useTheme } from 'next-themes';
 
 const Index = () => {
+  const { theme } = useTheme();
+  
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <header className="py-3 px-4 border-b border-border">
