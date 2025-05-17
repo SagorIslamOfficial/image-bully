@@ -35,12 +35,17 @@ const EditorDropdownMenu: React.FC<EditorDropdownProps> = ({
           <ChevronDown className="h-3 w-3 opacity-50" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48 bg-popover shadow-md">
+      <DropdownMenuContent 
+        align="end" 
+        className="w-48 bg-popover shadow-md z-50 border border-border rounded-md"
+        sideOffset={4}
+        forceMount
+      >
         {options.map((option) => (
           <DropdownMenuItem 
             key={option.value} 
             onClick={() => onOptionSelect(option.value)}
-            className="cursor-pointer flex items-center gap-2 py-1.5"
+            className="cursor-pointer flex items-center gap-2 py-1.5 hover:bg-accent focus:bg-accent rounded-sm"
           >
             {option.icon && <span className="text-muted-foreground">{option.icon}</span>}
             <span>{option.label}</span>
