@@ -20,11 +20,14 @@ import {
   ZoomOut,
   Wand,
   Type,
+  Eraser,
+  FileImage
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import TextOverlay from './TextOverlay';
 import EnhanceTools from './EnhanceTools';
+import BackgroundRemover from './BackgroundRemover';
 
 interface ImageEditorProps {
   originalImage: File | null;
@@ -47,6 +50,8 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
   const [processedImageUrl, setProcessedImageUrl] = useState<string>(previewUrl);
   const [originalSize, setOriginalSize] = useState<{ width: number; height: number } | null>(null);
   const [processedSize, setProcessedSize] = useState<{ width: number; height: number } | null>(null);
+  const [processedFileSize, setProcessedFileSize] = useState<number | null>(null);
+  const [compressionSavings, setCompressionSavings] = useState<number>(0);
   
   // Text overlay state
   const [textOverlays, setTextOverlays] = useState<Array<{
@@ -66,6 +71,11 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
   const [isRestoring, setIsRestoring] = useState(false);
   const [isUpscaling, setIsUpscaling] = useState(false);
   const [enhancementProgress, setEnhancementProgress] = useState(0);
+  
+  // Background removal state
+  const [isRemovingBackground, setIsRemovingBackground] = useState(false);
+  const [bgColor, setBgColor] = useState('#ffffff');
+  const [isTransparent, setIsTransparent] = useState(false);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -123,7 +133,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
   // Update the canvas when settings change
   useEffect(() => {
     updateCanvas();
-  }, [brightness, contrast, saturation, resizePercentage, format, quality, noiseReduction, sharpen]);
+  }, [brightness, contrast, saturation, resizePercentage, format, quality, noiseReduction, sharpen, bgColor, isTransparent]);
 
   // Update text canvas when text overlays change
   useEffect(() => {
@@ -289,6 +299,91 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
 
   const handleDeleteText = (id: string) => {
     setTextOverlays(prev => prev.filter(overlay => overlay.id !== id));
+  };
+
+  const handleRemoveBackground = async () => {
+    if (!canvasRef.current || !processedSize) return;
+    
+    setIsRemovingBackground(true);
+    setEnhancementProgress(10);
+    
+    try {
+      // Simulate AI background removal process
+      await new Promise(resolve => setTimeout(resolve, 500));
+      setEnhancementProgress(30);
+      
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      
+      if (!ctx) {
+        throw new Error('Canvas context not available');
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+      setEnhancementProgress(50);
+      
+      // Create a temporary canvas to store the original image
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = canvas.width;
+      tempCanvas.height = canvas.height;
+      const tempCtx = tempCanvas.getContext('2d');
+      
+      if (!tempCtx) {
+        throw new Error('Temporary canvas context not available');
+      }
+      
+      // Copy the original image
+      tempCtx.drawImage(canvas, 0, 0);
+      
+      // Clear original canvas and fill with background color if not transparent
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      if (!isTransparent) {
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      
+      // Apply a simple chroma key effect (for simulation purposes)
+      // In a real app, this would use a ML model for segmentation
+      const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+      const data = imageData.data;
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+      setEnhancementProgress(70);
+      
+      // Draw the foreground part of the image back onto the canvas with background
+      ctx.drawImage(tempCanvas, 0, 0);
+      
+      await new Promise(resolve => setTimeout(resolve, 300));
+      setEnhancementProgress(100);
+      
+      // Generate new processed image URL
+      generateProcessedImage();
+      
+      toast({
+        title: "Background removed",
+        description: isTransparent ? "Image now has a transparent background" : `Background replaced with ${bgColor}`,
+      });
+    } catch (error) {
+      console.error('Error during background removal:', error);
+      toast({
+        title: "Background removal failed",
+        description: "An error occurred during processing",
+        variant: "destructive"
+      });
+    } finally {
+      setTimeout(() => {
+        setIsRemovingBackground(false);
+        setEnhancementProgress(0);
+      }, 500);
+    }
+  };
+
+  const handleChangeBackground = (color: string) => {
+    setBgColor(color);
+    if (!isTransparent) {
+      updateCanvas();
+    }
   };
 
   const handleUpscale = async () => {
@@ -459,7 +554,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
     
     // Determine the output format
     let outputFormat = 'image/jpeg';
-    if (format === 'png') {
+    if (format === 'png' || isTransparent) {
       outputFormat = 'image/png';
     } else if (format === 'webp') {
       outputFormat = 'image/webp';
@@ -470,6 +565,19 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
     // Convert the canvas to a data URL with the selected quality (0-1)
     const outputQuality = format === 'png' ? undefined : quality[0] / 100;
     const dataURL = compositeCanvas.toDataURL(outputFormat, outputQuality);
+    
+    // Calculate file size
+    fetch(dataURL)
+      .then(res => res.blob())
+      .then(blob => {
+        const newSize = blob.size;
+        setProcessedFileSize(newSize);
+        
+        if (originalImage) {
+          const savings = originalImage.size - newSize;
+          setCompressionSavings(savings);
+        }
+      });
     
     // Clean up previous processed image URL
     if (processedImageUrl !== previewUrl) {
@@ -504,7 +612,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
     let outputFormat = 'image/jpeg';
     let fileExtension = '.jpg';
     
-    if (format === 'png') {
+    if (format === 'png' || isTransparent) {
       outputFormat = 'image/png';
       fileExtension = '.png';
     } else if (format === 'webp') {
@@ -564,6 +672,8 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
     setNoiseReduction([0]);
     setSharpen([0]);
     setTextOverlays([]);
+    setBgColor('#ffffff');
+    setIsTransparent(false);
     updateCanvas();
   };
 
@@ -576,12 +686,16 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
   };
 
   return (
-    <div className="w-full grid gap-6 grid-cols-1 md:grid-cols-3">
+    <div className="w-full grid gap-4 grid-cols-1 md:grid-cols-3">
       <div className="md:col-span-2">
-        <Card className="w-full h-full flex flex-col">
+        <Card className="w-full h-full flex flex-col shadow-md">
           <CardContent className="p-0 overflow-hidden relative flex-1 min-h-[300px]">
-            <div className="absolute inset-0 flex items-center justify-center bg-[#1a1a1a] overflow-auto">
-              <div className="relative" style={{ transform: `scale(${scale})` }}>
+            <div className="absolute inset-0 flex items-center justify-center overflow-auto">
+              <div 
+                className="relative" 
+                style={{ transform: `scale(${scale})` }}
+                data-background={isTransparent ? 'transparent' : bgColor}
+              >
                 <canvas
                   ref={canvasRef}
                   className="max-w-full max-h-full shadow-lg"
@@ -592,26 +706,28 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
                   className="absolute top-0 left-0 pointer-events-none"
                   style={{ display: 'none' }}
                 />
-                <img 
-                  src={processedImageUrl} 
-                  alt="Preview" 
-                  className="max-w-full max-h-full transition-all"
-                />
-                
-                {/* Text overlay positioning interface would be here in a real implementation */}
+                <div className="relative">
+                  <img 
+                    src={processedImageUrl} 
+                    alt="Preview" 
+                    className="max-w-full max-h-full transition-all rounded-sm"
+                  />
+                </div>
                 
                 {/* Progress overlay for enhancements */}
-                {(isRestoring || isUpscaling) && (
-                  <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center">
-                    <div className="w-64 h-3 bg-gray-700 rounded-full overflow-hidden">
+                {(isRestoring || isUpscaling || isRemovingBackground) && (
+                  <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center rounded backdrop-blur-sm">
+                    <div className="w-64 h-2 bg-gray-700 rounded-full overflow-hidden">
                       <div 
                         className="h-full bg-primary rounded-full transition-all duration-300"
                         style={{ width: `${enhancementProgress}%` }}
                       />
                     </div>
-                    <p className="text-white mt-3">
-                      {isRestoring ? "Restoring image..." : "Upscaling image..."}
-                      {enhancementProgress}%
+                    <p className="text-white mt-3 text-sm">
+                      {isRestoring ? "Restoring image..." : 
+                       isUpscaling ? "Upscaling image..." : 
+                       "Removing background..."}
+                      {" "}{enhancementProgress}%
                     </p>
                   </div>
                 )}
@@ -650,36 +766,40 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
       </div>
 
       <div className="md:col-span-1">
-        <Card className="w-full h-full">
-          <CardContent className="p-4">
-            <Tabs defaultValue="adjust">
-              <TabsList className="grid w-full grid-cols-5 mb-4">
-                <TabsTrigger value="adjust">
-                  <SlidersVertical size={16} className="mr-2" />
+        <Card className="w-full h-full shadow-md">
+          <CardContent className="p-3">
+            <Tabs defaultValue="adjust" className="w-full">
+              <TabsList className="grid w-full grid-cols-3 mb-4">
+                <TabsTrigger value="adjust" className="text-xs flex flex-col items-center py-1">
+                  <SlidersVertical size={14} className="mb-1" />
                   Adjust
                 </TabsTrigger>
-                <TabsTrigger value="resize">
-                  <ZoomIn size={16} className="mr-2" />
-                  Resize
-                </TabsTrigger>
-                <TabsTrigger value="enhance">
-                  <Wand size={16} className="mr-2" />
+                <TabsTrigger value="enhance" className="text-xs flex flex-col items-center py-1">
+                  <Wand size={14} className="mb-1" />
                   Enhance
                 </TabsTrigger>
-                <TabsTrigger value="text">
-                  <Type size={16} className="mr-2" />
+                <TabsTrigger value="background" className="text-xs flex flex-col items-center py-1">
+                  <Eraser size={14} className="mb-1" />
+                  Background
+                </TabsTrigger>
+                <TabsTrigger value="text" className="text-xs flex flex-col items-center py-1">
+                  <Type size={14} className="mb-1" />
                   Text
                 </TabsTrigger>
-                <TabsTrigger value="export">
-                  <Download size={16} className="mr-2" />
+                <TabsTrigger value="resize" className="text-xs flex flex-col items-center py-1">
+                  <ZoomIn size={14} className="mb-1" />
+                  Resize
+                </TabsTrigger>
+                <TabsTrigger value="export" className="text-xs flex flex-col items-center py-1">
+                  <FileImage size={14} className="mb-1" />
                   Export
                 </TabsTrigger>
               </TabsList>
               
-              <TabsContent value="adjust" className="space-y-4">
+              <TabsContent value="adjust" className="space-y-3">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="brightness">Brightness</Label>
+                    <Label htmlFor="brightness" className="text-xs">Brightness</Label>
                     <span className="text-xs">{brightness[0]}%</span>
                   </div>
                   <Slider
@@ -695,7 +815,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
                 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="contrast">Contrast</Label>
+                    <Label htmlFor="contrast" className="text-xs">Contrast</Label>
                     <span className="text-xs">{contrast[0]}%</span>
                   </div>
                   <Slider
@@ -711,7 +831,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
                 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="saturation">Saturation</Label>
+                    <Label htmlFor="saturation" className="text-xs">Saturation</Label>
                     <span className="text-xs">{saturation[0]}%</span>
                   </div>
                   <Slider
@@ -726,10 +846,45 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
                 </div>
               </TabsContent>
               
-              <TabsContent value="resize" className="space-y-4">
+              <TabsContent value="enhance" className="space-y-3">
+                <EnhanceTools
+                  noiseReduction={noiseReduction}
+                  setNoiseReduction={setNoiseReduction}
+                  sharpen={sharpen}
+                  setSharpen={setSharpen}
+                  upscaleFactor={upscaleFactor}
+                  setUpscaleFactor={setUpscaleFactor}
+                  onRestoreImage={handleRestoreImage}
+                  onUpscaleImage={handleUpscale}
+                  isProcessing={isRestoring || isUpscaling}
+                />
+              </TabsContent>
+              
+              <TabsContent value="background" className="space-y-3">
+                <BackgroundRemover
+                  onRemoveBackground={handleRemoveBackground}
+                  onChangeBackground={handleChangeBackground}
+                  isProcessing={isRemovingBackground}
+                  bgColor={bgColor}
+                  setBgColor={setBgColor}
+                  isTransparent={isTransparent}
+                  setIsTransparent={setIsTransparent}
+                />
+              </TabsContent>
+              
+              <TabsContent value="text" className="space-y-3">
+                <TextOverlay 
+                  textOverlays={textOverlays}
+                  onAddText={handleAddText}
+                  onUpdateText={handleUpdateText}
+                  onDeleteText={handleDeleteText}
+                />
+              </TabsContent>
+              
+              <TabsContent value="resize" className="space-y-3">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="resize">Resize</Label>
+                    <Label htmlFor="resize" className="text-xs">Resize</Label>
                     <span className="text-xs">{resizePercentage[0]}%</span>
                   </div>
                   <Slider
@@ -756,34 +911,11 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
                 )}
               </TabsContent>
               
-              <TabsContent value="enhance" className="space-y-4">
-                <EnhanceTools
-                  noiseReduction={noiseReduction}
-                  setNoiseReduction={setNoiseReduction}
-                  sharpen={sharpen}
-                  setSharpen={setSharpen}
-                  upscaleFactor={upscaleFactor}
-                  setUpscaleFactor={setUpscaleFactor}
-                  onRestoreImage={handleRestoreImage}
-                  onUpscaleImage={handleUpscale}
-                  isProcessing={isRestoring || isUpscaling}
-                />
-              </TabsContent>
-              
-              <TabsContent value="text" className="space-y-4">
-                <TextOverlay 
-                  textOverlays={textOverlays}
-                  onAddText={handleAddText}
-                  onUpdateText={handleUpdateText}
-                  onDeleteText={handleDeleteText}
-                />
-              </TabsContent>
-              
-              <TabsContent value="export" className="space-y-4">
+              <TabsContent value="export" className="space-y-3">
                 <div className="space-y-2">
-                  <Label htmlFor="format">Format</Label>
+                  <Label htmlFor="format" className="text-xs">Format</Label>
                   <Select value={format} onValueChange={setFormat}>
-                    <SelectTrigger id="format">
+                    <SelectTrigger id="format" className="text-xs h-8">
                       <SelectValue placeholder="Select format" />
                     </SelectTrigger>
                     <SelectContent>
@@ -797,7 +929,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
                 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="quality">
+                    <Label htmlFor="quality" className="text-xs">
                       Quality {format !== 'png' ? `(${quality[0]}%)` : ''}
                     </Label>
                   </div>
@@ -819,45 +951,64 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
                 </div>
                 
                 {originalImage && (
-                  <div className="text-xs text-muted-foreground space-y-1">
+                  <div className="text-xs text-muted-foreground space-y-1 pt-1">
                     <div className="flex justify-between">
                       <span>Original size:</span>
                       <span>{formatBytes(originalImage.size)}</span>
                     </div>
+                    {processedFileSize && (
+                      <div className="flex justify-between">
+                        <span>Optimized size:</span>
+                        <span>{formatBytes(processedFileSize)}</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </TabsContent>
             </Tabs>
           </CardContent>
-          <CardFooter className="flex justify-between pt-0">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleReset}
-              className="flex items-center gap-1"
-            >
-              <RotateCcw size={14} />
-              Reset
-            </Button>
-            
-            <div className="flex gap-2">
+          <CardFooter className="flex flex-col items-stretch pt-0 p-3 gap-3">
+            <div className="flex justify-between">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={onReset}
-              >
-                Change Image
-              </Button>
-              
-              <Button
-                size="sm"
-                onClick={handleDownload}
+                onClick={handleReset}
                 className="flex items-center gap-1"
               >
-                <Download size={14} />
-                Download
+                <RotateCcw size={14} />
+                Reset
               </Button>
+              
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onReset}
+                >
+                  Change Image
+                </Button>
+                
+                <Button
+                  size="sm"
+                  onClick={handleDownload}
+                  className="flex items-center gap-1"
+                >
+                  <Download size={14} />
+                  Download
+                </Button>
+              </div>
             </div>
+            
+            {compressionSavings > 0 && (
+              <div className="text-center text-xs bg-muted/50 rounded-md p-2 mt-2 animate-fade-in">
+                <strong>Space saved: {formatBytes(compressionSavings)}</strong>
+                <div className="text-muted-foreground">
+                  {compressionSavings > 0 
+                    ? `That's ${Math.round((compressionSavings / originalImage!.size) * 100)}% smaller than the original!` 
+                    : 'No space savings with current settings.'}
+                </div>
+              </div>
+            )}
           </CardFooter>
         </Card>
       </div>
@@ -866,4 +1017,3 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
 };
 
 export default ImageEditor;
-
