@@ -1,11 +1,18 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import ImageOptimizer from '@/components/ImageOptimizer';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { useTheme } from 'next-themes';
 
 const Index = () => {
-  const { theme } = useTheme();
+  const { theme, setTheme } = useTheme();
+  
+  // Force dark mode to be applied on initial load
+  useEffect(() => {
+    if (!theme) {
+      setTheme('dark');
+    }
+  }, [theme, setTheme]);
   
   return (
     <div className="min-h-screen bg-background flex flex-col">

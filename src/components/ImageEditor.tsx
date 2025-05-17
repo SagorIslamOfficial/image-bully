@@ -689,9 +689,10 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
   const handleTabSelect = (tab: string) => {
     // Set the active tab based on the selected option
     if (['adjust', 'enhance', 'background', 'text', 'resize', 'export'].includes(tab)) {
-      const tabsElement = document.querySelector(`[data-state="active"][value="${tab}"]`);
-      if (tabsElement) {
-        (tabsElement as HTMLElement).click();
+      // Find the tab element and click it
+      const tabTrigger = document.querySelector(`[value="${tab}"]`);
+      if (tabTrigger) {
+        (tabTrigger as HTMLElement).click();
       }
     }
   };

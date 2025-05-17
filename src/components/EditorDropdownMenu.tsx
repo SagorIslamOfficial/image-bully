@@ -39,7 +39,6 @@ const EditorDropdownMenu: React.FC<EditorDropdownProps> = ({
         align="end" 
         className="w-48 bg-popover shadow-md z-50 border border-border rounded-md"
         sideOffset={4}
-        forceMount
       >
         {options.map((option) => (
           <DropdownMenuItem 
