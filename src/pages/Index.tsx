@@ -26,7 +26,7 @@ const Index = () => {
 
       <footer className="py-4 px-4 border-t border-border text-center text-sm text-muted-foreground">
         <p>
-          Built with React, Tailwind CSS, and Shadcn UI &copy; {new Date().getFullYear()}
+          AIS &copy; {new Date().getFullYear()}
         </p>
       </footer>
     </div>
