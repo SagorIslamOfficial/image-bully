@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
@@ -686,13 +685,13 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
   };
 
   return (
-    <div className="w-full grid gap-4 grid-cols-1 md:grid-cols-3">
-      <div className="md:col-span-2">
+    <div className="w-full grid gap-4 grid-cols-1 md:grid-cols-2">
+      <div className="md:col-span-1">
         <Card className="w-full h-full flex flex-col shadow-md">
           <CardContent className="p-0 overflow-hidden relative flex-1 min-h-[300px]">
             <div className="absolute inset-0 flex items-center justify-center overflow-auto">
-              <div 
-                className="relative" 
+              <div
+                className="relative"
                 style={{ transform: `scale(${scale})` }}
                 data-background={isTransparent ? 'transparent' : bgColor}
               >
@@ -707,25 +706,25 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
                   style={{ display: 'none' }}
                 />
                 <div className="relative">
-                  <img 
-                    src={processedImageUrl} 
-                    alt="Preview" 
+                  <img
+                    src={processedImageUrl}
+                    alt="Preview"
                     className="max-w-full max-h-full transition-all rounded-sm"
                   />
                 </div>
-                
+
                 {/* Progress overlay for enhancements */}
                 {(isRestoring || isUpscaling || isRemovingBackground) && (
                   <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center rounded backdrop-blur-sm">
                     <div className="w-64 h-2 bg-gray-700 rounded-full overflow-hidden">
-                      <div 
+                      <div
                         className="h-full bg-primary rounded-full transition-all duration-300"
                         style={{ width: `${enhancementProgress}%` }}
                       />
                     </div>
                     <p className="text-white mt-3 text-sm">
-                      {isRestoring ? "Restoring image..." : 
-                       isUpscaling ? "Upscaling image..." : 
+                      {isRestoring ? "Restoring image..." :
+                       isUpscaling ? "Upscaling image..." :
                        "Removing background..."}
                       {" "}{enhancementProgress}%
                     </p>
@@ -757,7 +756,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({
               </Button>
             </div>
             <div className="text-xs text-muted-foreground">
-              {processedSize 
+              {processedSize
                 ? `${processedSize.width} × ${processedSize.height}`
                 : 'Processing...'}
             </div>
